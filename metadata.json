@@ -1,0 +1,6 @@
+{
+  "name": "CineMatch AI",
+  "description": "An AI-powered movie recommendation engine that learns from your preferences and search history to suggest your next favorite film.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
