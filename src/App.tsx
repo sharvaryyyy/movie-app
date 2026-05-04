@@ -34,6 +34,7 @@ import {
 } from "firebase/firestore";
 import { getMovieRecommendations, MovieRecommendation } from "./services/geminiService";
 import { cn } from "./lib/utils";
+import { LandingPage } from "./components/LandingPage";
 
 const GENRES = [
   "Action", "Comedy", "Drama", "Sci-Fi", "Horror", "Romance", 
@@ -53,23 +54,25 @@ export default function App() {
   const [history, setHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [trending, setTrending] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
 
   useEffect(() => {
     // Fetch trending from backend
-    fetch("/api/trending")
+   fetch("http://16.171.232.21:3000/api/trending")
       .then(res => res.json())
       .then(data => setTrending(data))
       .catch(err => console.error("Error fetching trending:", err));
 
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
-      setLoading(false);
       if (u) {
         await setDoc(doc(db, "users", u.uid), {
           email: u.email,
         }, { merge: true });
         fetchHistory(u.uid);
+        fetchFavorites(u.uid);
       }
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -92,6 +95,26 @@ export default function App() {
     );
     const snap = await getDocs(q);
     setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+  };
+
+  const fetchFavorites = async (uid: string) => {
+    const docRef = doc(db, "users", uid, "preferences", "favorites");
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      setFavorites(snap.data().titles || []);
+    }
+  };
+
+  const toggleFavorite = async (title: string) => {
+    if (!user) return;
+    const newFavorites = favorites.includes(title) 
+      ? favorites.filter(t => t !== title)
+      : [...favorites, title];
+    
+    setFavorites(newFavorites);
+    await setDoc(doc(db, "users", user.uid, "preferences", "favorites"), {
+      titles: newFavorites
+    });
   };
 
   const saveInteraction = async (type: string, data: any) => {
@@ -167,6 +190,10 @@ export default function App() {
         <Loader2 className="w-12 h-12 text-[#C5A059] animate-spin" />
       </div>
     );
+  }
+
+  if (!user && !loading) {
+    return <LandingPage onLogin={login} />;
   }
 
   return (
@@ -306,16 +333,32 @@ export default function App() {
                   >
                     <div className="relative mb-6 group overflow-hidden">
                       <img 
-                        src={`https://picsum.photos/seed/${movie.title.replace(/\s/g, '')}/600/400`}
-                        className="w-full aspect-video object-cover grayscale brightness-75 transition-all duration-700 group-hover:grayscale-0 group-hover:brightness-100 group-hover:scale-105"
+                        src={movie.posterUrl || `https://picsum.photos/seed/${movie.title.replace(/\s/g, '')}/400/600`}
+                        className="w-full aspect-[2/3] object-cover grayscale brightness-75 transition-all duration-700 group-hover:grayscale-0 group-hover:brightness-100 group-hover:scale-105"
                         alt={movie.title}
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = `https://picsum.photos/seed/${movie.title.replace(/\s/g, '')}/400/600`;
+                        }}
                       />
                       {idx === 0 && (
                         <div className="absolute top-4 right-4 text-[10px] text-[#C5A059] border border-[#C5A059] px-2 py-0.5 uppercase tracking-widest bg-black/50 backdrop-blur-sm">
                           Top Match
                         </div>
                       )}
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFavorite(movie.title);
+                        }}
+                        className={cn(
+                          "absolute bottom-4 right-4 p-2 rounded-full backdrop-blur-md transition-all duration-300",
+                          favorites.includes(movie.title) ? "bg-[#C5A059] text-black" : "bg-black/40 text-white/60 hover:text-white"
+                        )}
+                      >
+                        <Star className={cn("w-4 h-4", favorites.includes(movie.title) && "fill-current")} />
+                      </button>
                     </div>
                     
                     <div className="font-serif italic text-sm text-[#C5A059] mb-1">
@@ -346,6 +389,14 @@ export default function App() {
                     animate={{ opacity: 1, y: 0 }}
                     className="movie-card opacity-60 hover:opacity-100"
                   >
+                    <div className="relative mb-4 overflow-hidden">
+                      <img 
+                        src={`https://picsum.photos/seed/${movie.title.replace(/\s/g, '')}/400/600`}
+                        className="w-full aspect-[2/3] object-cover grayscale brightness-50"
+                        alt={movie.title}
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
                     <div className="font-serif italic text-sm text-[#C5A059] mb-1">
                       Trending • {movie.year}
                     </div>
